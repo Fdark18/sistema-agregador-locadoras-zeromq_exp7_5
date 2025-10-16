@@ -1,0 +1,17 @@
+[project]
+name = "exp7-5"
+version = "1"
+description = "Sistema de aluguel de carros usando ZeroMQ com padrões PUB-SUB e REQ-REP"
+authors = [
+    {name = "jhonatan"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyzmq>=26.0.0",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
