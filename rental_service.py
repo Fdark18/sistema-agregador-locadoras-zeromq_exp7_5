@@ -3,18 +3,24 @@ Serviço de Locadora de Carros - Locadora A
 Usa padrão PUB-SUB para receber comandos e REQ para enviar respostas
 """
 import zmq
+import zmq.utils.win32
 from datetime import datetime
 from typing import List, Dict, Optional
 
-class RentalService:
-    def __init__(self, service_name: str, api_url: str, aggregator_pub_port: int = 5555, aggregator_rep_port: int = 5556):
-        self.service_name = service_name
-        self.api_url = api_url
-        self.aggregator_pub_port = aggregator_pub_port
-        self.aggregator_rep_port = aggregator_rep_port
+class Main():
+    # URLs para conexões
+    _sub_ch = "tcp://localhost:5555"  # Socket SUB para receber comandos
+    _req_ch = "tcp://localhost:5556"  # Socket REQ para enviar respostas
+
+    def __init__(self, context: Optional[zmq.Context] = None):
+        self.c = context or zmq.Context.instance()  # Contexts are threadsafe, singleton
+
+        # Dados do serviço
+        self.service_name = "Locadora A - Centro"
+        self.api_url = "http://api.locadora-a.com.br/rental"
 
         # Lista de carros esportivos: Id, Nome, Valor, Alugado, Tempo
-        self.cars: List[Dict] = [
+        self.cars: List[Dict[str, any]] = [
             {
                 "id": 1,
                 "nome": "2023/Ferrari/F8 Tributo",
@@ -45,23 +51,13 @@ class RentalService:
             }
         ]
 
-        # Contexto ZeroMQ
-        self.context = zmq.Context()
-
         # Socket SUB para receber comandos do agregador
-        self.sub_socket = self.context.socket(zmq.SUB)
-        self.sub_socket.connect(f"tcp://localhost:{self.aggregator_pub_port}")
-        self.sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")  # Subscreve a todos os tópicos
+        self.sub_socket = self.c.socket(zmq.SUB)
 
         # Socket REQ para enviar respostas ao agregador
-        self.req_socket = self.context.socket(zmq.REQ)
-        self.req_socket.connect(f"tcp://localhost:{self.aggregator_rep_port}")
+        self.req_socket = self.c.socket(zmq.REQ)
 
-        print(f"[{self.service_name}] Serviço iniciado")
-        print(f"[{self.service_name}] Conectado ao agregador PUB: tcp://localhost:{self.aggregator_pub_port}")
-        print(f"[{self.service_name}] Conectado ao agregador REP: tcp://localhost:{self.aggregator_rep_port}")
-
-    def get_available_cars(self) -> List[Dict]:
+    def get_available_cars(self) -> List[Dict[str, any]]:
         """Retorna lista de carros disponíveis (não alugados)"""
         return [
             {"nome": car["nome"], "valor": car["valor"]}
@@ -97,12 +93,21 @@ class RentalService:
         print(f"[{self.service_name}] Recebido: {ack}")
 
     def run(self):
-        """Execução principal do serviço"""
-        print(f"\n[{self.service_name}] Aguardando comandos do agregador...")
+        with self.sub_socket as sub_s, self.req_socket as req_s:
+            # Connect dos sockets
+            sub_s.connect(Main._sub_ch)
+            sub_s.setsockopt_string(zmq.SUBSCRIBE, "")  # Subscreve a todos os tópicos
 
-        try:
+            req_s.connect(Main._req_ch)
+
+            print(f"[{self.service_name}] Serviço iniciado")
+            print(f"[{self.service_name}] Conectado ao agregador PUB: {Main._sub_ch}")
+            print(f"[{self.service_name}] Conectado ao agregador REP: {Main._req_ch}")
+
+            print(f"\n[{self.service_name}] Aguardando comandos do agregador...")
+
             # Aguarda comando
-            message = self.sub_socket.recv_string()
+            message = sub_s.recv_string()
             print(f"[{self.service_name}] Comando recebido: {message}")
 
             if message == "QTY":
@@ -110,22 +115,12 @@ class RentalService:
             else:
                 print(f"[{self.service_name}] Comando desconhecido: {message}")
 
-        except KeyboardInterrupt:
-            print(f"\n[{self.service_name}] Encerrando serviço...")
-        finally:
-            self.cleanup()
+def w32hk():
+    zmq.Context.instance().term()
 
-    def cleanup(self):
-        """Limpa recursos"""
-        self.sub_socket.close()
-        self.req_socket.close()
-        self.context.term()
-        print(f"[{self.service_name}] Serviço encerrado")
-
-
-if __name__ == "__main__":
-    service = RentalService(
-        service_name="Locadora A - Centro",
-        api_url="http://api.locadora-a.com.br/rental"
-    )
-    service.run()
+if __name__ == '__main__':
+    try:
+        with zmq.utils.win32.allow_interrupt(w32hk):
+            Main().run()
+    except KeyboardInterrupt:
+        print(f"\n[Locadora A] End.")
