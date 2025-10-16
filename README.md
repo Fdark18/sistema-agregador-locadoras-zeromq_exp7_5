@@ -17,7 +17,7 @@ Sistema que permite consultar disponibilidade de carros esportivos em multiplas 
 ### 1. Instalar dependencias
 
 ```bash
-poetry install --no-root
+poetry install --no-root 
 ```
 
 ### 2. Executar o agregador (Terminal 1)
