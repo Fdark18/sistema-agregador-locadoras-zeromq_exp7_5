@@ -3,35 +3,27 @@ Serviço Agregador de Aluguel de Carros
 Usa padrão PUB para enviar comandos e REP para receber respostas das locadoras
 """
 import zmq
+import zmq.utils.win32
 import time
 from typing import List, Dict
 
-class RentalAggregator:
-    def __init__(self, pub_port: int = 5555, rep_port: int = 5556):
-        self.pub_port = pub_port
-        self.rep_port = rep_port
+class Main():
+    # URLs para conexões
+    _pub_ch = "tcp://*:5555"  # Socket PUB para enviar comandos
+    _rep_ch = "tcp://*:5556"  # Socket REP para receber respostas
 
-        # Contexto ZeroMQ
-        self.context = zmq.Context()
+    def __init__(self, context=None):
+        self.c = context or zmq.Context.instance()  # Contexts are threadsafe, singleton
 
         # Socket PUB para enviar comandos às locadoras
-        self.pub_socket = self.context.socket(zmq.PUB)
-        self.pub_socket.bind(f"tcp://*:{self.pub_port}")
+        self.pub_socket = self.c.socket(zmq.PUB)
 
         # Socket REP para receber respostas das locadoras
-        self.rep_socket = self.context.socket(zmq.REP)
-        self.rep_socket.bind(f"tcp://*:{self.rep_port}")
+        self.rep_socket = self.c.socket(zmq.REP)
 
         print("=" * 60)
         print("AGREGADOR DE LOCADORAS DE CARROS")
         print("=" * 60)
-        print(f"Socket PUB iniciado na porta {self.pub_port}")
-        print(f"Socket REP iniciado na porta {self.rep_port}")
-        print("=" * 60)
-
-        # Aguarda um tempo para as locadoras se conectarem
-        print("\nAguardando conexões das locadoras...")
-        time.sleep(2)
 
     def request_availability(self, num_responses: int = 2):
         """
@@ -123,24 +115,28 @@ class RentalAggregator:
         print("\n" + "=" * 60)
 
     def run(self):
-        """Execução principal do agregador"""
-        try:
+        with self.pub_socket as pub_s, self.rep_socket as rep_s:
+            # Bind dos sockets
+            pub_s.bind(Main._pub_ch)
+            rep_s.bind(Main._rep_ch)
+
+            print(f"Socket PUB iniciado: {Main._pub_ch}")
+            print(f"Socket REP iniciado: {Main._rep_ch}")
+            print("=" * 60)
+
+            # Aguarda um tempo para as locadoras se conectarem
+            print("\nAguardando conexões das locadoras...")
+            time.sleep(2)
+
             # Solicita disponibilidade (esperando 2 locadoras)
             self.request_availability(num_responses=2)
 
-        except KeyboardInterrupt:
-            print("\n\n[AGREGADOR] Encerrando serviço...")
-        finally:
-            self.cleanup()
+def w32hk():
+    zmq.Context.instance().term()
 
-    def cleanup(self):
-        """Limpa recursos"""
-        self.pub_socket.close()
-        self.rep_socket.close()
-        self.context.term()
-        print("[AGREGADOR] Serviço encerrado")
-
-
-if __name__ == "__main__":
-    aggregator = RentalAggregator()
-    aggregator.run()
+if __name__ == '__main__':
+    try:
+        with zmq.utils.win32.allow_interrupt(w32hk):
+            Main().run()
+    except KeyboardInterrupt:
+        print("\n[AGREGADOR] End.")
